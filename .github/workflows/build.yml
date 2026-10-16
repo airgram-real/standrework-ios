@@ -8,6 +8,7 @@ on:
 jobs:
   build-dylib:
     runs-on: macos-14
+    timeout-minutes: 40
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,7 +27,9 @@ jobs:
       - name: Verify
         run: |
           file build/StandRework.dylib
-          xcrun --sdk iphoneos nm -gU build/StandRework.dylib | head -20 || true
+          xcrun --sdk iphoneos nm -gU build/StandRework.dylib | grep -iE "JNI|sr_install|DobbyHook" | head -20 || true
+          echo "--- dylib size ---"
+          ls -la build/StandRework.dylib
 
       - name: Upload dylib
         uses: actions/upload-artifact@v4

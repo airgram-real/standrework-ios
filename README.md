@@ -5,14 +5,33 @@ Dylib, который в рантайме уводит трафик игры н�
 
 ## Что делает
 
-Перехватывает два системных вызова (через [fishhook](https://github.com/facebook/fishhook)):
+**Основное — il2cpp-хук** (через [Dobby](https://github.com/jmpews/Dobby)).
+Хукается обфусцированный TCP-коннект игры:
 
-| Хук | Поведение |
-|---|---|
-| `getaddrinfo()` | хосты из `SR_REDIRECT_HOSTS` резолвятся в `SR_SERVER_IP` |
-| `connect()` | порты Photon (5055–5063, 27000–27002, 9090/9091) переписываются на `SR_SERVER_IP:SR_GAME_PORT`; соединения на наш IP с «неправильным» портом получают порт 2222. Порты 80/443 не трогаются |
+```
+GIFELELIEGF::AOFELLMANAO(GIFELELIEGF* __this, MILECCIILMJ* config, MethodInfo*)
+    UnityFramework + 0x2E3F7E8
+```
 
-Всё пишется в лог с префиксом `[SR]` — смотреть в Console.app или через `idevicesyslog`.
+Перед вызовом оригинала конфиг переписывается — ровно как в Android-либе:
+
+| Смещение в config | Что | Новое значение |
+|---|---|---|
+| `0x10`, `0x18` | строки-хосты | `SR_SERVER_IP` |
+| `0x20`, `0x24` | порты | `SR_GAME_PORT` |
+| `0x28` | флаг TLS | `false` |
+
+`MILECCIILMJ` (TypeDefIndex 14035) — тот же самый layout, что патчит `src/main.cpp`
+(`config+0x10` хост, `config+0x28` TLS). Отключение TLS — ключевое: без него соединение
+с голым IP обрывается на сертификате.
+
+**Дополнительно — socket-хуки** через [fishhook](https://github.com/facebook/fishhook),
+сейчас в режиме только-логирования (`SR_SOCKET_REDIRECT 0`): `getaddrinfo()` и `connect()`
+пишут в лог каждый адрес и порт.
+
+Всё пишется с префиксом `[SR]` — Console.app или `idevicesyslog`.
+Ключевые строки: `[SR] UnityFramework base = ...`, `[SR] DobbyHook rc=0`,
+`[SR] CONNECT config=... p1=.. p2=.. tls=..`, `[SR] CONNECT patched -> ...`.
 
 ## Настройки
 
@@ -21,8 +40,10 @@ Dylib, который в рантайме уводит трафик игры н�
 ```c
 static const char *SR_SERVER_IP = "84.21.173.237";
 static const int   SR_GAME_PORT = 2222;
-static const char *SR_REDIRECT_HOSTS[] = { "fra02.bolt.bolt-api.com", ... };
-static const int   SR_PHOTON_PORTS[]   = { 5055, 5056, ..., 27000, ... };
+
+#define SR_USE_IL2CPP_HOOKS 1     // il2cpp-хук через Dobby
+#define SR_SOCKET_REDIRECT  0     // socket-хуки только логируют
+#define SR_OFF_CONNECT_MAIN 0x2E3F7E8UL   // GIFELELIEGF::AOFELLMANAO
 ```
 
 ## Сборка через GitHub Actions

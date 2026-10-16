@@ -35,14 +35,14 @@ static BOOL sr_host_matches(const char *node) {
     return NO;
 }
 
-static BOOL sr_is_photon_port(int port) {
+__attribute__((unused)) static BOOL sr_is_photon_port(int port) {
     for (int i = 0; SR_PHOTON_PORTS[i]; i++) {
         if (SR_PHOTON_PORTS[i] == port) return YES;
     }
     return NO;
 }
 
-static BOOL sr_is_web_port(int port) {
+__attribute__((unused)) static BOOL sr_is_web_port(int port) {
     return port == SR_WEB_PORT || port == SR_WEB_PORT_2;
 }
 
@@ -56,6 +56,7 @@ static void sr_ip_str(uint32_t addr_be, char *out, size_t n) {
 
 static int sr_getaddrinfo(const char *node, const char *service,
                           const struct addrinfo *hints, struct addrinfo **res) {
+#if SR_SOCKET_REDIRECT
     if (sr_host_matches(node)) {
         char ip[INET_ADDRSTRLEN];
         sr_ip_str(g_server_addr_be, ip, sizeof(ip));
@@ -76,6 +77,11 @@ static int sr_getaddrinfo(const char *node, const char *service,
         *res = ai;
         return 0;
     }
+#else
+    if (sr_host_matches(node)) {
+        NSLog(@"[SR] getaddrinfo '%s' (socket redirect off; il2cpp hook handles it)", node);
+    }
+#endif
     return orig_getaddrinfo(node, service, hints, res);
 }
 
@@ -88,7 +94,9 @@ static int sr_connect(int fd, const struct sockaddr *addr, socklen_t len) {
         char ip[INET_ADDRSTRLEN];
         sr_ip_str(sin.sin_addr.s_addr, ip, sizeof(ip));
         int port = ntohs(sin.sin_port);
+        NSLog(@"[SR] connect %s:%d", ip, port);
 
+#if SR_SOCKET_REDIRECT
         BOOL to_our_ip = (sin.sin_addr.s_addr == g_server_addr_be);
 
         if (!to_our_ip && sr_is_photon_port(port)) {
@@ -103,8 +111,7 @@ static int sr_connect(int fd, const struct sockaddr *addr, socklen_t len) {
             sin.sin_port = htons((uint16_t)SR_GAME_PORT);
             return orig_connect(fd, (struct sockaddr *)&sin, sizeof(sin));
         }
-
-        NSLog(@"[SR] connect %s:%d (passthrough)", ip, port);
+#endif
     }
     return orig_connect(fd, addr, len);
 }

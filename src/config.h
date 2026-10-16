@@ -40,10 +40,24 @@ static const int SR_PHOTON_PORTS[] = {
 //   NetworkingPeer field offsets: AppId 0xE8, MasterServerAddress 0x110,
 //                                 GameServerAddress 0x118, Server 0x120
 //
-// These are only used when SR_USE_IL2CPP_HOOKS is enabled (needs Dobby).
+// ---------------------------------------------------------------------------
+// MAIN HOOK:  GIFELELIEGF::AOFELLMANAO(__this, MILECCIILMJ* config, method)
+//             returns Task   (obfuscated TcpClient connect)
+//
+// MILECCIILMJ layout (dump.cs, TypeDefIndex 14035) — identical to what the
+// Android lib patches:
+//     0x10 string host1      0x18 string host2
+//     0x20 int port1         0x24 int port2
+//     0x28 bool useTLS       0x2C int   0x30 int
+//
+// The Android lib does: *(void**)(config+0x10) = "IP"; *(bool*)(config+0x28) = false.
 
-#define SR_USE_IL2CPP_HOOKS 0
+#define SR_USE_IL2CPP_HOOKS 1     // needs Dobby (built by build.sh)
+#define SR_SOCKET_REDIRECT  0     // socket hooks: log only, no rewriting
 
+#define SR_OFF_CONNECT_MAIN                      0x2E3F7E8UL
+
+// Secondary offsets (Photon) — kept for reference / future hooks
 #define SR_OFF_NETWORKINGPEER_CONNECT            0x01A23D24UL
 #define SR_OFF_NETWORKINGPEER_GETNAMESERVERADDR  0x01A22CACUL
 #define SR_OFF_PHOTONASYNC_CONNECT               0x01F6A818UL
