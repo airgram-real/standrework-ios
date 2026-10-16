@@ -27,20 +27,32 @@ static const int   SR_PHOTON_PORTS[]   = { 5055, 5056, ..., 27000, ... };
 
 ## Сборка через GitHub Actions
 
-1. Создай пустой репозиторий на GitHub (например `standrework-ios`).
-2. Залей туда **содержимое этой папки** (`ios/`) как корень репозитория:
+Репозиторий: **https://github.com/airgram-real/standrework-ios** (уже создан, пустой).
+Папка `E:\libing\ios` уже инициализирована как git-репозиторий с remote `origin` —
+осталось только запушить:
 
 ```bash
 cd E:/libing/ios
-git init -b main
-git add .
-git commit -m "StandRework iOS dylib"
-git remote add origin https://github.com/<ТВОЙ_ЛОГИН>/standrework-ios.git
 git push -u origin main
 ```
 
-3. Actions → workflow **Build StandRework iOS dylib** → дождись зелёной галочки.
-4. Внизу страницы сборки → **Artifacts** → скачай `StandRework.dylib`.
+При первом пуше Git Credential Manager попросит залогиниться в GitHub
+(нужен аккаунт, у которого есть права на `airgram-real/standrework-ios`).
+
+Если нужно пересоздать с нуля:
+
+```bash
+cd E:/libing/ios
+rm -rf .git
+git init -b main
+git add .
+git commit -m "StandRework iOS dylib"
+git remote add origin https://github.com/airgram-real/standrework-ios.git
+git push -u origin main
+```
+
+Дальше: Actions → workflow **Build StandRework iOS dylib** → дождись зелёной галочки.
+Внизу страницы сборки → **Artifacts** → скачай `StandRework.dylib`.
 
 Пересобрать вручную: Actions → workflow → **Run workflow**.
 
