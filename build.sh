@@ -20,41 +20,55 @@ if [ ! -f src/fishhook.c ]; then
   cp _fishhook/fishhook.h _fishhook/fishhook.c src/
 fi
 
-# --- Dobby (iOS arm64 static lib, needed for the il2cpp inline hook) ---------
-if [ ! -f _dobby/libdobby.a ]; then
-  echo "Fetching Dobby..."
-  rm -rf _dobby_src _dobby _dobby_build
-  git clone --depth 1 https://github.com/jmpews/Dobby.git _dobby_src
+# --- Dobby (iOS arm64 static lib) — only when the il2cpp hook is enabled -----
+# NOTE: Dobby inline hooks are fatal on a non-jailbroken device: patching code in
+# a signed Mach-O triggers "CODESIGNING / Invalid Page" and iOS kills the app.
+NEED_DOBBY=0
+if grep -qE '^#define[[:space:]]+SR_USE_IL2CPP_HOOKS[[:space:]]+1' src/config.h; then
+  NEED_DOBBY=1
+  echo "SR_USE_IL2CPP_HOOKS=1 -> Dobby will be built"
+else
+  echo "SR_USE_IL2CPP_HOOKS=0 -> skipping Dobby (fishhook only)"
+fi
 
-  echo "Building Dobby for iphoneos/arm64 via CMake ..."
-  cmake -S _dobby_src -B _dobby_build \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_SYSTEM_NAME=iOS \
-    -DCMAKE_OSX_ARCHITECTURES=arm64 \
-    -DCMAKE_SYSTEM_PROCESSOR=arm64 \
-    -DCMAKE_OSX_DEPLOYMENT_TARGET="$MIN_IOS" \
-    -DCMAKE_OSX_SYSROOT="$SDK" \
-    -DDOBBY_GENERATE_SHARED=OFF \
-    -DDOBBY_DEBUG=OFF \
-    -DDOBBY_BUILD_EXAMPLE=OFF \
-    -DDOBBY_BUILD_TEST=OFF || echo "cmake configure failed"
-  cmake --build _dobby_build --config Release -j 8 || echo "cmake build failed"
-
-  mkdir -p _dobby
-  find _dobby_build -name 'libdobby.a' -print -exec cp {} _dobby/ \; 2>/dev/null || true
-
-  # Fallback: upstream helper script (its "import pipes" is dead code and breaks
-  # on Python >= 3.13, so strip the line first).
+DOBBY_FLAGS=()
+if [ "$NEED_DOBBY" = "1" ]; then
   if [ ! -f _dobby/libdobby.a ]; then
-    echo "CMake path produced nothing, falling back to platform_builder.py ..."
-    sed -i '' '/^import pipes$/d' _dobby_src/scripts/platform_builder.py || true
-    ( cd _dobby_src && python3 scripts/platform_builder.py --platform=iphoneos --arch=arm64 ) || true
-    find _dobby_src -name 'libdobby.a' -print -exec cp {} _dobby/ \; 2>/dev/null || true
-  fi
+    echo "Fetching Dobby..."
+    rm -rf _dobby_src _dobby _dobby_build
+    git clone --depth 1 https://github.com/jmpews/Dobby.git _dobby_src
 
-  find _dobby_src -name 'dobby.h' -print -exec cp {} _dobby/ \; 2>/dev/null || true
-  test -f _dobby/libdobby.a || { echo "ERROR: libdobby.a not produced"; exit 1; }
-  test -f _dobby/dobby.h    || { echo "ERROR: dobby.h not found"; exit 1; }
+    echo "Building Dobby for iphoneos/arm64 via CMake ..."
+    cmake -S _dobby_src -B _dobby_build \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_SYSTEM_NAME=iOS \
+      -DCMAKE_OSX_ARCHITECTURES=arm64 \
+      -DCMAKE_SYSTEM_PROCESSOR=arm64 \
+      -DCMAKE_OSX_DEPLOYMENT_TARGET="$MIN_IOS" \
+      -DCMAKE_OSX_SYSROOT="$SDK" \
+      -DDOBBY_GENERATE_SHARED=OFF \
+      -DDOBBY_DEBUG=OFF \
+      -DDOBBY_BUILD_EXAMPLE=OFF \
+      -DDOBBY_BUILD_TEST=OFF || echo "cmake configure failed"
+    cmake --build _dobby_build --config Release -j 8 || echo "cmake build failed"
+
+    mkdir -p _dobby
+    find _dobby_build -name 'libdobby.a' -print -exec cp {} _dobby/ \; 2>/dev/null || true
+
+    # Fallback: upstream helper script (its "import pipes" is dead code and breaks
+    # on Python >= 3.13, so strip the line first).
+    if [ ! -f _dobby/libdobby.a ]; then
+      echo "CMake path produced nothing, falling back to platform_builder.py ..."
+      sed -i '' '/^import pipes$/d' _dobby_src/scripts/platform_builder.py || true
+      ( cd _dobby_src && python3 scripts/platform_builder.py --platform=iphoneos --arch=arm64 ) || true
+      find _dobby_src -name 'libdobby.a' -print -exec cp {} _dobby/ \; 2>/dev/null || true
+    fi
+
+    find _dobby_src -name 'dobby.h' -print -exec cp {} _dobby/ \; 2>/dev/null || true
+    test -f _dobby/libdobby.a || { echo "ERROR: libdobby.a not produced"; exit 1; }
+    test -f _dobby/dobby.h    || { echo "ERROR: dobby.h not found"; exit 1; }
+  fi
+  DOBBY_FLAGS=(-I _dobby -I _dobby_src _dobby/libdobby.a)
 fi
 
 mkdir -p "$OUT"
@@ -67,16 +81,16 @@ xcrun --sdk iphoneos clang \
   -miphoneos-version-min="$MIN_IOS" \
   -O2 -fobjc-arc \
   -fvisibility=default \
-  -I src -I _dobby -I _dobby_src \
+  -I src \
   -framework Foundation \
   -lc++ \
   -install_name "@executable_path/Frameworks/${NAME}.dylib" \
   -o "$OUT/${NAME}.dylib" \
   src/main.m src/il2cpp_hook.m src/fishhook.c \
-  _dobby/libdobby.a
+  ${DOBBY_FLAGS[@]+"${DOBBY_FLAGS[@]}"}
 
 echo "Built: $OUT/${NAME}.dylib"
-file "$OUT/${NAME}.dylib" || true
+ls -la "$OUT/${NAME}.dylib"
 
 # Ad-hoc sign (the app gets re-signed anyway; this keeps tools happy).
 codesign -f -s - "$OUT/${NAME}.dylib" 2>/dev/null && echo "codesign: ad-hoc OK" || echo "codesign: skipped"

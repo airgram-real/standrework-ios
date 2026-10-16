@@ -5,33 +5,23 @@ Dylib, который в рантайме уводит трафик игры н�
 
 ## Что делает
 
-**Основное — il2cpp-хук** (через [Dobby](https://github.com/jmpews/Dobby)).
-Хукается обфусцированный TCP-коннект игры:
+> **Важно:** Dobby-хуки на неjailbreak-устройстве **фатальны**. Патч кода в подписанном
+> `UnityFramework` даёт `CODESIGNING / Invalid Page` и iOS убивает приложение (проверено
+> по крашлогу). Поэтому сейчас включён только **fishhook** — он правит указатели в `__DATA`,
+> а страницы данных ядро не валидирует. Флаг `SR_USE_IL2CPP_HOOKS` держать в `0`.
 
-```
-GIFELELIEGF::AOFELLMANAO(GIFELELIEGF* __this, MILECCIILMJ* config, MethodInfo*)
-    UnityFramework + 0x2E3F7E8
-```
+Через [fishhook](https://github.com/facebook/fishhook):
 
-Перед вызовом оригинала конфиг переписывается — ровно как в Android-либе:
-
-| Смещение в config | Что | Новое значение |
-|---|---|---|
-| `0x10`, `0x18` | строки-хосты | `SR_SERVER_IP` |
-| `0x20`, `0x24` | порты | `SR_GAME_PORT` |
-| `0x28` | флаг TLS | `false` |
-
-`MILECCIILMJ` (TypeDefIndex 14035) — тот же самый layout, что патчит `src/main.cpp`
-(`config+0x10` хост, `config+0x28` TLS). Отключение TLS — ключевое: без него соединение
-с голым IP обрывается на сертификате.
-
-**Дополнительно — socket-хуки** через [fishhook](https://github.com/facebook/fishhook),
-сейчас в режиме только-логирования (`SR_SOCKET_REDIRECT 0`): `getaddrinfo()` и `connect()`
-пишут в лог каждый адрес и порт.
+| Хук | Поведение |
+|---|---|
+| `getaddrinfo()` | хосты из `SR_REDIRECT_HOSTS` резолвятся в `SR_SERVER_IP` |
+| `connect()` | порты Photon (5055–5063, 27000–27002, 9090/9091) → `SR_SERVER_IP:SR_GAME_PORT`; соединения на наш IP с «неправильным» портом получают 2222. Порты 80/443 не трогаются |
 
 Всё пишется с префиксом `[SR]` — Console.app или `idevicesyslog`.
-Ключевые строки: `[SR] UnityFramework base = ...`, `[SR] DobbyHook rc=0`,
-`[SR] CONNECT config=... p1=.. p2=.. tls=..`, `[SR] CONNECT patched -> ...`.
+
+**TLS** снимается не в дайлибе, а **статическим патчем** `UnityFramework` (см. `config.h`
+и `../work026/tls_patch.json`): сеттер `set_AHPENINGFAC` превращён в `ret`, геттер возвращает
+`false`. Это вшивается до подписи, поэтому не нарушает code signing.
 
 ## Настройки
 

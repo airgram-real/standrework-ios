@@ -52,8 +52,11 @@ static const int SR_PHOTON_PORTS[] = {
 //
 // The Android lib does: *(void**)(config+0x10) = "IP"; *(bool*)(config+0x28) = false.
 
-#define SR_USE_IL2CPP_HOOKS 1     // needs Dobby (built by build.sh)
-#define SR_SOCKET_REDIRECT  0     // socket hooks: log only, no rewriting
+// Dobby inline hooks are IMPOSSIBLE here: patching code in a signed Mach-O makes
+// iOS kill the app ("CODESIGNING / Invalid Page", confirmed by a crash report).
+// fishhook only rewrites __DATA pointers, which the kernel does not validate.
+#define SR_USE_IL2CPP_HOOKS 0     // Dobby — DO NOT enable on non-jailbroken iOS
+#define SR_SOCKET_REDIRECT  1     // getaddrinfo + connect rewriting (fishhook, safe)
 
 // What to rewrite in the connect config.
 // The 0.22.0 lib patches ONLY host1 (+0x10) and useTLS (+0x28).

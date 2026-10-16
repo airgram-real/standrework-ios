@@ -11,6 +11,13 @@
 // Everything else (host2, ports) is only logged, never touched — the 0.26.0 lib
 // patches those too, but clobbering them broke the game on 0.22.0.
 
+#include "config.h"
+
+// Dobby patching of signed code is fatal on a non-jailbroken device
+// ("CODESIGNING / Invalid Page"), so this whole file compiles to nothing
+// unless the flag is explicitly enabled.
+#if SR_USE_IL2CPP_HOOKS
+
 #import <Foundation/Foundation.h>
 #import <mach-o/dyld.h>
 #include <dlfcn.h>
@@ -18,7 +25,6 @@
 #include <unistd.h>
 #include <string.h>
 #include "dobby.h"
-#include "config.h"
 
 #define OFF_HOST1  0x10
 #define OFF_HOST2  0x18
@@ -140,3 +146,5 @@ void sr_install_il2cpp_hooks(void) {
     pthread_create(&t, NULL, sr_worker, NULL);
     pthread_detach(t);
 }
+
+#endif  // SR_USE_IL2CPP_HOOKS
