@@ -1,0 +1,36 @@
+name: Build StandRework iOS dylib
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-dylib:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Make build script executable
+        run: chmod +x build.sh
+
+      - name: Build dylib
+        run: ./build.sh
+
+      - name: Verify
+        run: |
+          file build/StandRework.dylib
+          xcrun --sdk iphoneos nm -gU build/StandRework.dylib | head -20 || true
+
+      - name: Upload dylib
+        uses: actions/upload-artifact@v4
+        with:
+          name: StandRework.dylib
+          path: build/StandRework.dylib
+          if-no-files-found: error
