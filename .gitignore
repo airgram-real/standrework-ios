@@ -1,0 +1,11 @@
+# build outputs
+build/
+*.dylib
+*.o
+*.dSYM/
+
+# fetched deps
+_fishhook/
+
+# macOS
+.DS_Store
