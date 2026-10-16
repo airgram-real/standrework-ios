@@ -55,6 +55,13 @@ static const int SR_PHOTON_PORTS[] = {
 #define SR_USE_IL2CPP_HOOKS 1     // needs Dobby (built by build.sh)
 #define SR_SOCKET_REDIRECT  0     // socket hooks: log only, no rewriting
 
+// What to rewrite in the connect config.
+// The 0.22.0 lib patches ONLY host1 (+0x10) and useTLS (+0x28).
+// Extra fields below are from the 0.26.0 lib — they clobber values the game may
+// still need, so they are off by default.
+#define SR_PATCH_HOST2      0     // +0x18
+#define SR_PATCH_PORTS      0     // +0x20 / +0x24
+
 #define SR_OFF_CONNECT_MAIN                      0x2E3F7E8UL
 
 // Secondary offsets (Photon) — kept for reference / future hooks

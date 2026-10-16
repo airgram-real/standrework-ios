@@ -4,11 +4,12 @@
 //     GIFELELIEGF::AOFELLMANAO(GIFELELIEGF* __this, MILECCIILMJ* config, MethodInfo*)
 // at UnityFramework + SR_OFF_CONNECT_MAIN (0x2E3F7E8 for Standoff 2 0.22.0 iOS).
 //
-// Before the original runs it rewrites the connection config the same way the
-// Android lib does:
-//     config+0x10 / +0x18  -> host strings  = SR_SERVER_IP
-//     config+0x20 / +0x24  -> ports         = SR_GAME_PORT
-//     config+0x28          -> useTLS        = false
+// Before the original runs it rewrites the connect config exactly like the
+// 0.22.0 Android lib:
+//     config+0x10  -> host string  = SR_SERVER_IP
+//     config+0x28  -> useTLS       = false
+// Everything else (host2, ports) is only logged, never touched — the 0.26.0 lib
+// patches those too, but clobbering them broke the game on 0.22.0.
 
 #import <Foundation/Foundation.h>
 #import <mach-o/dyld.h>
@@ -41,25 +42,65 @@ static uintptr_t sr_find_image(const char *needle) {
     return 0;
 }
 
-static void *sr_hook_connect(void *self, void *config, void *method) {
-    if (config) {
-        uintptr_t c = (uintptr_t)config;
-        NSLog(@"[SR] CONNECT config=%p host1=%p host2=%p p1=%d p2=%d tls=%d",
-              config, *(void **)(c + OFF_HOST1), *(void **)(c + OFF_HOST2),
-              *(int *)(c + OFF_PORT1), *(int *)(c + OFF_PORT2), *(bool *)(c + OFF_USETLS));
-
-        if (p_il2cpp_string_new) {
-            *(void **)(c + OFF_HOST1) = p_il2cpp_string_new(SR_SERVER_IP);
-            *(void **)(c + OFF_HOST2) = p_il2cpp_string_new(SR_SERVER_IP);
-        } else {
-            NSLog(@"[SR] !! il2cpp_string_new not resolved, host left as is");
-        }
-        *(int *)(c + OFF_PORT1) = SR_GAME_PORT;
-        *(int *)(c + OFF_PORT2) = SR_GAME_PORT;
-        *(bool *)(c + OFF_USETLS) = false;
-
-        NSLog(@"[SR] CONNECT patched -> %s:%d tls=off", SR_SERVER_IP, SR_GAME_PORT);
+static void sr_log_string(const char *label, void *s) {
+    if (!s) {
+        NSLog(@"[SR]   %s = <null>", label);
+        return;
     }
+    int len = *(int *)((uintptr_t)s + 0x10);
+    if (len < 0 || len > 512) {
+        NSLog(@"[SR]   %s = <bad length %d>", label, len);
+        return;
+    }
+    const uint16_t *ch = (const uint16_t *)((uintptr_t)s + 0x14);
+    char buf[520];
+    int n = 0;
+    for (int i = 0; i < len && n < 511; i++) {
+        uint16_t c = ch[i];
+        buf[n++] = (c >= 32 && c < 127) ? (char)c : '.';
+    }
+    buf[n] = 0;
+    NSLog(@"[SR]   %s = \"%s\"", label, buf);
+}
+
+static void *sr_hook_connect(void *self, void *config, void *method) {
+    if (!config || !orig_connect) {
+        if (!orig_connect) NSLog(@"[SR] !! orig_connect is NULL, cannot forward");
+        return orig_connect ? orig_connect(self, config, method) : NULL;
+    }
+
+    uintptr_t c = (uintptr_t)config;
+    NSLog(@"[SR] CONNECT config=%p p1=%d p2=%d tls=%d i2c=%d i3=%d",
+          config, *(int *)(c + OFF_PORT1), *(int *)(c + OFF_PORT2),
+          *(bool *)(c + OFF_USETLS), *(int *)(c + 0x2C), *(int *)(c + 0x30));
+    sr_log_string("host1", *(void **)(c + OFF_HOST1));
+    sr_log_string("host2", *(void **)(c + OFF_HOST2));
+
+    if (p_il2cpp_string_new) {
+        void *s = p_il2cpp_string_new(SR_SERVER_IP);
+        if (s) {
+            *(void **)(c + OFF_HOST1) = s;
+#if SR_PATCH_HOST2
+            void *s2 = p_il2cpp_string_new(SR_SERVER_IP);
+            if (s2) *(void **)(c + OFF_HOST2) = s2;
+#endif
+            NSLog(@"[SR] CONNECT host1 -> %s", SR_SERVER_IP);
+        } else {
+            NSLog(@"[SR] !! il2cpp_string_new returned null");
+        }
+    } else {
+        NSLog(@"[SR] !! il2cpp_string_new not resolved");
+    }
+
+#if SR_PATCH_PORTS
+    *(int *)(c + OFF_PORT1) = SR_GAME_PORT;
+    *(int *)(c + OFF_PORT2) = SR_GAME_PORT;
+    NSLog(@"[SR] CONNECT ports -> %d", SR_GAME_PORT);
+#endif
+
+    *(bool *)(c + OFF_USETLS) = false;
+    NSLog(@"[SR] CONNECT tls -> off");
+
     return orig_connect(self, config, method);
 }
 
