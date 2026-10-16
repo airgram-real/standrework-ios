@@ -6,6 +6,9 @@ build/
 
 # fetched deps
 _fishhook/
+_dobby/
+_dobby_src/
+_dobby_build/
 
 # macOS
 .DS_Store
